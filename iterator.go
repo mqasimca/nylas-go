@@ -8,6 +8,22 @@ import (
 // ErrDone is returned by Iterator.Next when iteration is complete.
 var ErrDone = errors.New("no more items")
 
+// Iterator provides paginated iteration over API resources.
+// Use Next() to get items one at a time, or Collect() to get all items at once.
+//
+// Example:
+//
+//	iter := client.Messages.ListAll(ctx, grantID, nil)
+//	for {
+//	    msg, err := iter.Next()
+//	    if errors.Is(err, nylas.ErrDone) {
+//	        break
+//	    }
+//	    if err != nil {
+//	        return err
+//	    }
+//	    process(msg)
+//	}
 type Iterator[T any] struct {
 	fetch     func(ctx context.Context, pageToken string) ([]T, string, error)
 	ctx       context.Context
@@ -18,6 +34,7 @@ type Iterator[T any] struct {
 	err       error
 }
 
+// NewIterator creates a new Iterator with the given fetch function.
 func NewIterator[T any](ctx context.Context, fetch func(context.Context, string) ([]T, string, error)) *Iterator[T] {
 	return &Iterator[T]{
 		ctx:   ctx,
@@ -25,6 +42,7 @@ func NewIterator[T any](ctx context.Context, fetch func(context.Context, string)
 	}
 }
 
+// Next returns the next item in the iteration. Returns ErrDone when there are no more items.
 func (it *Iterator[T]) Next() (*T, error) {
 	if it.err != nil {
 		return nil, it.err
@@ -59,6 +77,7 @@ func (it *Iterator[T]) Next() (*T, error) {
 	return &it.buffer[0], nil
 }
 
+// Collect returns all remaining items as a slice. Useful when you need all items at once.
 func (it *Iterator[T]) Collect() ([]*T, error) {
 	var all []*T
 	for {
@@ -73,6 +92,7 @@ func (it *Iterator[T]) Collect() ([]*T, error) {
 	}
 }
 
+// Reset clears the iterator state, allowing iteration to start over from the beginning.
 func (it *Iterator[T]) Reset() {
 	it.buffer = nil
 	it.pageToken = ""

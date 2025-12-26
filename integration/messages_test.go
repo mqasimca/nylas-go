@@ -1,8 +1,19 @@
 //go:build integration
 
+// Package integration contains integration tests for the Nylas Go SDK.
+//
+// Messages Integration Tests Coverage:
+//   - List, Get, ListAll, Update, ListScheduled, GetScheduled, Clean, ListWithFilters ✓
+//   - Send ✓ (requires NYLAS_TEST_EMAIL env var)
+//
+// Intentionally NOT tested (safety reasons):
+//   - Delete: Permanently deletes messages from user's mailbox
+//   - StopScheduled: Requires active scheduled messages; tested indirectly via unit tests
+
 package integration
 
 import (
+	"os"
 	"testing"
 
 	nylas "github.com/mqasimca/nylas-go"
@@ -293,6 +304,50 @@ func TestMessages_ListWithFilters(t *testing.T) {
 			}
 			t.Logf("Found %d messages with 'test' in subject", len(resp.Data))
 		})
+	})
+}
+
+func TestMessages_Send(t *testing.T) {
+	testEmail := os.Getenv("NYLAS_TEST_EMAIL")
+	if testEmail == "" {
+		t.Skip("NYLAS_TEST_EMAIL not set, skipping Send test")
+	}
+
+	cfg := LoadConfig(t)
+	client := NewTestClient(t, cfg)
+
+	RunForEachProvider(t, cfg, func(t *testing.T, grantID string) {
+		ctx := NewTestContext(t)
+
+		// Send a test email
+		sendReq := &messages.SendRequest{
+			To: []messages.Participant{
+				{Email: testEmail, Name: "SDK Test Recipient"},
+			},
+			Subject: "Nylas Go SDK Integration Test - Messages.Send",
+			Body:    "<html><body><p>This is an automated test message from the Nylas Go SDK integration tests.</p><p>You can safely ignore or delete this message.</p></body></html>",
+		}
+
+		sent, err := client.Messages.Send(ctx, grantID, sendReq)
+		if err != nil {
+			t.Fatalf("Messages.Send failed: %v", err)
+		}
+
+		if sent.ID == "" {
+			t.Error("Sent message ID should not be empty")
+		}
+
+		t.Logf("Sent message: %s (subject: %s)", sent.ID, sent.Subject)
+
+		// Verify the message was sent by checking it exists
+		got, err := client.Messages.Get(ctx, grantID, sent.ID)
+		if err != nil {
+			t.Logf("Warning: could not verify sent message: %v", err)
+		} else {
+			if got.Subject != sendReq.Subject {
+				t.Errorf("Sent message subject = %s, want %s", got.Subject, sendReq.Subject)
+			}
+		}
 	})
 }
 

@@ -183,7 +183,7 @@ This installs pinned versions of:
 | Command | Description |
 |---------|-------------|
 | `make ci` | Run all CI checks (required before code changes) |
-| `make ci-full` | Run CI + integration tests |
+| `make ci-full` | Run CI + integration tests (output saved to `ci-full.txt`) |
 | `make test` | Run unit tests |
 | `make test-race` | Run tests with race detector |
 | `make test-integration` | Run integration tests |
@@ -244,7 +244,7 @@ make test-integration              # All integration tests
 make test-suite SUITE=Messages     # Messages tests only
 make test-suite SUITE=Threads      # Threads tests only
 make test-suite SUITE=Drafts       # Drafts tests only
-make ci-full                       # Full CI + integration tests
+make ci-full                       # Full CI + integration (saves to ci-full.txt)
 ```
 
 Integration tests automatically loop through all configured providers, running each test against Google, Microsoft, iCloud, etc.

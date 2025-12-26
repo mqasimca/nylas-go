@@ -1,8 +1,15 @@
 //go:build integration
 
+// Drafts Integration Tests Coverage:
+//   - List, Get, Create, Update, Delete, ListAll, CreateWithAttachmentMetadata ✓
+//   - Send ✓ (requires NYLAS_TEST_EMAIL env var)
+//
+// All DraftsService methods are fully tested.
+
 package integration
 
 import (
+	"os"
 	"testing"
 
 	"github.com/mqasimca/nylas-go"
@@ -98,6 +105,104 @@ func TestDrafts_CRUD(t *testing.T) {
 		}
 
 		t.Logf("Updated draft: %s -> %s", created.Subject, updated.Subject)
+	})
+}
+
+func TestDrafts_Get(t *testing.T) {
+	cfg := LoadConfig(t)
+	client := NewTestClient(t, cfg)
+
+	RunForEachProvider(t, cfg, func(t *testing.T, grantID string) {
+		ctx := NewTestContext(t)
+		cleanup := NewCleanup(t)
+
+		// Create a draft first
+		createReq := &drafts.CreateRequest{
+			Subject: "Draft for Get Test",
+			Body:    "This draft is for testing Get.",
+			To: []drafts.Participant{
+				{Email: "test@example.com", Name: "Test User"},
+			},
+		}
+
+		created, err := client.Drafts.Create(ctx, grantID, createReq)
+		if err != nil {
+			t.Fatalf("Drafts.Create failed: %v", err)
+		}
+
+		cleanup.Add(func() {
+			_ = client.Drafts.Delete(ctx, grantID, created.ID)
+		})
+
+		// Get the draft
+		got, err := client.Drafts.Get(ctx, grantID, created.ID)
+		if err != nil {
+			t.Fatalf("Drafts.Get failed: %v", err)
+		}
+
+		if got.ID != created.ID {
+			t.Errorf("Get() ID = %s, want %s", got.ID, created.ID)
+		}
+		if got.Subject != createReq.Subject {
+			t.Errorf("Get() Subject = %s, want %s", got.Subject, createReq.Subject)
+		}
+
+		t.Logf("Got draft: %s - %s", got.ID, got.Subject)
+	})
+}
+
+func TestDrafts_Update(t *testing.T) {
+	cfg := LoadConfig(t)
+	client := NewTestClient(t, cfg)
+
+	RunForEachProvider(t, cfg, func(t *testing.T, grantID string) {
+		ctx := NewTestContext(t)
+		cleanup := NewCleanup(t)
+
+		// Create a draft first
+		createReq := &drafts.CreateRequest{
+			Subject: "Draft for Update Test",
+			Body:    "Original body content.",
+			To: []drafts.Participant{
+				{Email: "test@example.com", Name: "Test User"},
+			},
+		}
+
+		created, err := client.Drafts.Create(ctx, grantID, createReq)
+		if err != nil {
+			t.Fatalf("Drafts.Create failed: %v", err)
+		}
+
+		cleanup.Add(func() {
+			_ = client.Drafts.Delete(ctx, grantID, created.ID)
+		})
+
+		// Update the draft
+		updateReq := &drafts.UpdateRequest{
+			Subject: "Updated Draft Subject",
+			Body:    "Updated body content.",
+		}
+
+		updated, err := client.Drafts.Update(ctx, grantID, created.ID, updateReq)
+		if err != nil {
+			t.Fatalf("Drafts.Update failed: %v", err)
+		}
+
+		if updated.Subject != updateReq.Subject {
+			t.Errorf("Update() Subject = %s, want %s", updated.Subject, updateReq.Subject)
+		}
+
+		t.Logf("Updated draft: %s -> %s", createReq.Subject, updated.Subject)
+
+		// Verify update by getting the draft again
+		got, err := client.Drafts.Get(ctx, grantID, created.ID)
+		if err != nil {
+			t.Fatalf("Drafts.Get after update failed: %v", err)
+		}
+
+		if got.Subject != updateReq.Subject {
+			t.Errorf("Get() after update Subject = %s, want %s", got.Subject, updateReq.Subject)
+		}
 	})
 }
 
@@ -208,6 +313,56 @@ func TestDrafts_Delete(t *testing.T) {
 		_, err = client.Drafts.Get(ctx, grantID, created.ID)
 		if err == nil {
 			t.Error("Expected error when getting deleted draft, got nil")
+		}
+	})
+}
+
+func TestDrafts_Send(t *testing.T) {
+	testEmail := os.Getenv("NYLAS_TEST_EMAIL")
+	if testEmail == "" {
+		t.Skip("NYLAS_TEST_EMAIL not set, skipping Send test")
+	}
+
+	cfg := LoadConfig(t)
+	client := NewTestClient(t, cfg)
+
+	RunForEachProvider(t, cfg, func(t *testing.T, grantID string) {
+		ctx := NewTestContext(t)
+
+		// Create a draft first
+		createReq := &drafts.CreateRequest{
+			Subject: "Nylas Go SDK Integration Test - Drafts.Send",
+			Body:    "<html><body><p>This is an automated test message sent via Drafts.Send from the Nylas Go SDK integration tests.</p><p>You can safely ignore or delete this message.</p></body></html>",
+			To: []drafts.Participant{
+				{Email: testEmail, Name: "SDK Test Recipient"},
+			},
+		}
+
+		created, err := client.Drafts.Create(ctx, grantID, createReq)
+		if err != nil {
+			t.Fatalf("Drafts.Create failed: %v", err)
+		}
+
+		t.Logf("Created draft: %s", created.ID)
+
+		// Send the draft
+		sent, err := client.Drafts.Send(ctx, grantID, created.ID)
+		if err != nil {
+			// Clean up the draft if send failed
+			_ = client.Drafts.Delete(ctx, grantID, created.ID)
+			t.Fatalf("Drafts.Send failed: %v", err)
+		}
+
+		if sent.ID == "" {
+			t.Error("Sent draft ID should not be empty")
+		}
+
+		t.Logf("Sent draft as message: %s (subject: %s)", sent.ID, sent.Subject)
+
+		// Verify the draft no longer exists (it was converted to a message)
+		_, err = client.Drafts.Get(ctx, grantID, created.ID)
+		if err == nil {
+			t.Log("Note: Draft still exists after send (provider-dependent behavior)")
 		}
 	})
 }

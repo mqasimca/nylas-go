@@ -7,17 +7,20 @@ import (
 	"time"
 )
 
+// Rate contains rate limit information from the Nylas API.
 type Rate struct {
-	Limit     int
-	Remaining int
-	Reset     time.Time
+	Limit     int       // Maximum requests allowed in the window
+	Remaining int       // Requests remaining in the current window
+	Reset     time.Time // When the rate limit window resets
 }
 
+// RateLimitError is returned when the API rate limit is exceeded.
 type RateLimitError struct {
 	Rate    Rate
 	Message string
 }
 
+// Error implements the error interface.
 func (e *RateLimitError) Error() string {
 	return fmt.Sprintf("nylas: rate limit exceeded until %v: %s", e.Rate.Reset, e.Message)
 }

@@ -109,14 +109,16 @@ ci:
 	@echo "==> CI checks passed!"
 
 # Run CI checks + integration tests (requires env vars)
-ci-full: ci
-	@$(MAKE) --no-print-directory test-integration
-	@echo "==> Full CI checks passed!"
+# Output saved to ci-full.txt for review
+ci-full:
+	@($(MAKE) --no-print-directory ci && \
+	  $(MAKE) --no-print-directory test-integration && \
+	  echo "==> Full CI checks passed!") 2>&1 | tee ci-full.txt
 
 # Clean build artifacts
 clean:
 	@echo "==> Cleaning..."
-	@rm -f coverage.out coverage.html
+	@rm -f coverage.out coverage.html ci-full.txt
 	@go clean ./...
 
 # Show help
@@ -140,7 +142,7 @@ help:
 	@echo "  Code Quality:"
 	@echo "    make install-tools      - Install CI tools (golangci-lint, govulncheck, gosec)"
 	@echo "    make ci                 - Run all CI checks (REQUIRED before code changes)"
-	@echo "    make ci-full            - Run CI + integration tests (requires env vars)"
+	@echo "    make ci-full            - Run CI + integration tests (saves to ci-full.txt)"
 	@echo "    make fmt                - Format code"
 	@echo "    make vet                - Run go vet"
 	@echo "    make lint               - Run golangci-lint"

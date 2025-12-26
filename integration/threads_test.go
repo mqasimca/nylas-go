@@ -1,5 +1,11 @@
 //go:build integration
 
+// Threads Integration Tests Coverage:
+//   - List, Get, ListAll, Update, ListWithFilters ✓
+//
+// Intentionally NOT tested (safety reasons):
+//   - Delete: Permanently deletes entire thread and all messages from user's mailbox
+
 package integration
 
 import (

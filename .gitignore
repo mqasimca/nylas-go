@@ -11,9 +11,10 @@ local/
 # Test binary
 *.test
 
-# Coverage
+# Coverage & CI output
 *.out
 coverage.html
+ci-full.txt
 
 # IDE
 .idea/

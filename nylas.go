@@ -13,6 +13,7 @@ import (
 	"time"
 )
 
+// Default configuration values for the Nylas API client.
 const (
 	defaultBaseURL   = "https://api.us.nylas.com"
 	defaultTimeout   = 90 * time.Second
@@ -20,6 +21,7 @@ const (
 	defaultRetryWait = 500 * time.Millisecond
 )
 
+// Client is the Nylas API client. It is safe for concurrent use by multiple goroutines.
 type Client struct {
 	APIKey     string
 	BaseURL    string
@@ -52,6 +54,14 @@ type service struct {
 	client *Client
 }
 
+// NewClient creates a new Nylas API client. An API key is required; use WithAPIKey to provide it.
+//
+// Example:
+//
+//	client, err := nylas.NewClient(
+//	    nylas.WithAPIKey("your-api-key"),
+//	    nylas.WithRegion(nylas.RegionEU),
+//	)
 func NewClient(opts ...Option) (*Client, error) {
 	c := &Client{
 		BaseURL:    defaultBaseURL,
@@ -86,6 +96,7 @@ func NewClient(opts ...Option) (*Client, error) {
 	return c, nil
 }
 
+// NewRequest creates an HTTP request for the Nylas API with proper headers and authentication.
 func (c *Client) NewRequest(ctx context.Context, method, path string, body any) (*http.Request, error) {
 	u, err := url.Parse(c.BaseURL + path)
 	if err != nil {
@@ -154,6 +165,8 @@ func (c *Client) doWithRetry(req *http.Request) (*http.Response, error) {
 	return resp, nil
 }
 
+// Do executes an HTTP request and decodes the JSON response into v.
+// The response is expected to be wrapped in a standard Nylas response envelope with data and request_id fields.
 func (c *Client) Do(req *http.Request, v any) (*Response[any], error) {
 	resp, err := c.doWithRetry(req)
 	if err != nil {
@@ -249,6 +262,7 @@ func (c *Client) updateRateLimits(resp *http.Response) {
 	c.rateLimits = parseRateLimits(resp)
 }
 
+// RateLimits returns the current rate limit information from the last API response.
 func (c *Client) RateLimits() Rate {
 	c.rateMu.Lock()
 	defer c.rateMu.Unlock()
@@ -265,19 +279,32 @@ func parseError(resp *http.Response) error {
 	return &apiErr
 }
 
-// Service type aliases
+// Service type aliases for accessing Nylas API resources.
 type (
-	MessagesService    service
-	ThreadsService     service
-	DraftsService      service
-	CalendarsService   service
-	EventsService      service
-	ContactsService    service
-	FoldersService     service
+	// MessagesService handles operations on email messages.
+	MessagesService service
+	// ThreadsService handles operations on email threads.
+	ThreadsService service
+	// DraftsService handles operations on email drafts.
+	DraftsService service
+	// CalendarsService handles operations on calendars.
+	CalendarsService service
+	// EventsService handles operations on calendar events.
+	EventsService service
+	// ContactsService handles operations on contacts.
+	ContactsService service
+	// FoldersService handles operations on email folders/labels.
+	FoldersService service
+	// AttachmentsService handles operations on email attachments.
 	AttachmentsService service
-	GrantsService      service
-	WebhooksService    service
-	AuthService        service
-	SchedulerService   service
-	NotetakersService  service
+	// GrantsService handles operations on connected accounts (grants).
+	GrantsService service
+	// WebhooksService handles operations on webhook subscriptions.
+	WebhooksService service
+	// AuthService handles authentication operations.
+	AuthService service
+	// SchedulerService handles scheduling operations.
+	SchedulerService service
+	// NotetakersService handles notetaker operations.
+	NotetakersService service
 )

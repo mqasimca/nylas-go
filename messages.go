@@ -8,7 +8,11 @@ import (
 	"github.com/mqasimca/nylas-go/messages"
 )
 
-// List returns messages for a grant.
+// List returns messages for a grant with optional filtering.
+//
+// The grantID is the ID of the connected account (obtained via OAuth).
+// Use opts to filter messages by sender, recipient, subject, date range, etc.
+// Returns a paginated response; use NextCursor for pagination or ListAll for iteration.
 func (s *MessagesService) List(ctx context.Context, grantID string, opts *messages.ListOptions) (*ListResponse[messages.Message], error) {
 	path := fmt.Sprintf("/v3/grants/%s/messages", grantID)
 
@@ -36,7 +40,11 @@ func (s *MessagesService) List(ctx context.Context, grantID string, opts *messag
 	}, nil
 }
 
-// Get returns a single message.
+// Get returns a single message by ID.
+//
+// The grantID is the ID of the connected account.
+// The messageID is the unique identifier of the message to retrieve.
+// Returns ErrNotFound if the message does not exist.
 func (s *MessagesService) Get(ctx context.Context, grantID, messageID string) (*messages.Message, error) {
 	path := fmt.Sprintf("/v3/grants/%s/messages/%s", grantID, messageID)
 
@@ -54,7 +62,12 @@ func (s *MessagesService) Get(ctx context.Context, grantID, messageID string) (*
 	return &msg, nil
 }
 
-// Send sends a new message.
+// Send sends a new email message immediately.
+//
+// The grantID is the ID of the connected account to send from.
+// At minimum, the To field and either Subject or Body must be provided.
+// To schedule a message for later delivery, set SendAt to a future Unix timestamp.
+// Returns the sent message with its assigned ID.
 func (s *MessagesService) Send(ctx context.Context, grantID string, send *messages.SendRequest) (*messages.Message, error) {
 	path := fmt.Sprintf("/v3/grants/%s/messages/send", grantID)
 
@@ -72,7 +85,11 @@ func (s *MessagesService) Send(ctx context.Context, grantID string, send *messag
 	return &msg, nil
 }
 
-// Update updates a message.
+// Update modifies a message's metadata (read status, starred, folders).
+//
+// The grantID is the ID of the connected account.
+// The messageID is the unique identifier of the message to update.
+// Only the fields specified in the UpdateRequest are modified.
 func (s *MessagesService) Update(ctx context.Context, grantID, messageID string, update *messages.UpdateRequest) (*messages.Message, error) {
 	path := fmt.Sprintf("/v3/grants/%s/messages/%s", grantID, messageID)
 
@@ -90,7 +107,11 @@ func (s *MessagesService) Update(ctx context.Context, grantID, messageID string,
 	return &msg, nil
 }
 
-// Delete deletes a message.
+// Delete permanently removes a message.
+//
+// The grantID is the ID of the connected account.
+// The messageID is the unique identifier of the message to delete.
+// This action cannot be undone. Consider moving to trash instead.
 func (s *MessagesService) Delete(ctx context.Context, grantID, messageID string) error {
 	path := fmt.Sprintf("/v3/grants/%s/messages/%s", grantID, messageID)
 
@@ -107,7 +128,10 @@ func (s *MessagesService) Delete(ctx context.Context, grantID, messageID string)
 	return nil
 }
 
-// ListAll returns an iterator for all messages.
+// ListAll returns an iterator that automatically paginates through all messages.
+//
+// Use Next() to retrieve messages one at a time, or Collect() to get all at once.
+// The iterator handles pagination automatically using the NextCursor from each response.
 func (s *MessagesService) ListAll(ctx context.Context, grantID string, opts *messages.ListOptions) *Iterator[messages.Message] {
 	return NewIterator(ctx, func(ctx context.Context, pageToken string) ([]messages.Message, string, error) {
 		o := opts
@@ -124,7 +148,10 @@ func (s *MessagesService) ListAll(ctx context.Context, grantID string, opts *mes
 	})
 }
 
-// ListScheduled returns scheduled messages.
+// ListScheduled returns all messages scheduled for future delivery.
+//
+// Scheduled messages were created with SendAt set to a future timestamp.
+// Use StopScheduled to cancel a scheduled message before it's sent.
 func (s *MessagesService) ListScheduled(ctx context.Context, grantID string) (messages.ScheduledMessagesList, error) {
 	path := fmt.Sprintf("/v3/grants/%s/messages/schedules", grantID)
 
@@ -142,7 +169,9 @@ func (s *MessagesService) ListScheduled(ctx context.Context, grantID string) (me
 	return result, nil
 }
 
-// GetScheduled returns a scheduled message.
+// GetScheduled returns details about a specific scheduled message.
+//
+// The scheduleID is obtained from ListScheduled or the response when scheduling a message.
 func (s *MessagesService) GetScheduled(ctx context.Context, grantID, scheduleID string) (*messages.ScheduledMessage, error) {
 	path := fmt.Sprintf("/v3/grants/%s/messages/schedules/%s", grantID, scheduleID)
 
@@ -160,7 +189,9 @@ func (s *MessagesService) GetScheduled(ctx context.Context, grantID, scheduleID 
 	return &msg, nil
 }
 
-// StopScheduled stops a scheduled message.
+// StopScheduled cancels a scheduled message before it's sent.
+//
+// The message will not be sent and cannot be recovered after cancellation.
 func (s *MessagesService) StopScheduled(ctx context.Context, grantID, scheduleID string) error {
 	path := fmt.Sprintf("/v3/grants/%s/messages/schedules/%s", grantID, scheduleID)
 
@@ -177,7 +208,10 @@ func (s *MessagesService) StopScheduled(ctx context.Context, grantID, scheduleID
 	return nil
 }
 
-// Clean removes extra information from messages.
+// Clean extracts clean conversation text from messages.
+//
+// This removes quoted text, signatures, and other noise to get the core message content.
+// Useful for AI processing, summarization, or displaying clean conversation threads.
 func (s *MessagesService) Clean(ctx context.Context, grantID string, clean *messages.CleanRequest) ([]messages.CleanResponse, error) {
 	path := fmt.Sprintf("/v3/grants/%s/messages/clean", grantID)
 
