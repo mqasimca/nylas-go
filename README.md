@@ -249,10 +249,6 @@ make ci-full                       # Full CI + integration tests
 
 Integration tests automatically loop through all configured providers, running each test against Google, Microsoft, iCloud, etc.
 
-## Examples
-
-See [examples/](examples/) directory.
-
 ## Documentation
 
 - [pkg.go.dev](https://pkg.go.dev/github.com/mqasimca/nylas-go)
