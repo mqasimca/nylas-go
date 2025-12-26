@@ -1,0 +1,283 @@
+package nylas
+
+import (
+	"bytes"
+	"context"
+	"encoding/json"
+	"fmt"
+	"io"
+	"net/http"
+	"net/url"
+	"strconv"
+	"sync"
+	"time"
+)
+
+const (
+	defaultBaseURL   = "https://api.us.nylas.com"
+	defaultTimeout   = 90 * time.Second
+	defaultRetries   = 2
+	defaultRetryWait = 500 * time.Millisecond
+)
+
+type Client struct {
+	APIKey     string
+	BaseURL    string
+	HTTPClient *http.Client
+
+	MaxRetries int
+	RetryWait  time.Duration
+
+	Messages    *MessagesService
+	Threads     *ThreadsService
+	Drafts      *DraftsService
+	Calendars   *CalendarsService
+	Events      *EventsService
+	Contacts    *ContactsService
+	Folders     *FoldersService
+	Attachments *AttachmentsService
+	Grants      *GrantsService
+	Webhooks    *WebhooksService
+	Auth        *AuthService
+	Scheduler   *SchedulerService
+	Notetakers  *NotetakersService
+
+	rateMu     sync.Mutex
+	rateLimits Rate
+
+	common service
+}
+
+type service struct {
+	client *Client
+}
+
+func NewClient(opts ...Option) (*Client, error) {
+	c := &Client{
+		BaseURL:    defaultBaseURL,
+		HTTPClient: &http.Client{Timeout: defaultTimeout},
+		MaxRetries: defaultRetries,
+		RetryWait:  defaultRetryWait,
+	}
+
+	for _, opt := range opts {
+		opt(c)
+	}
+
+	if c.APIKey == "" {
+		return nil, ErrMissingAPIKey
+	}
+
+	c.common.client = c
+	c.Messages = (*MessagesService)(&c.common)
+	c.Threads = (*ThreadsService)(&c.common)
+	c.Drafts = (*DraftsService)(&c.common)
+	c.Calendars = (*CalendarsService)(&c.common)
+	c.Events = (*EventsService)(&c.common)
+	c.Contacts = (*ContactsService)(&c.common)
+	c.Folders = (*FoldersService)(&c.common)
+	c.Attachments = (*AttachmentsService)(&c.common)
+	c.Grants = (*GrantsService)(&c.common)
+	c.Webhooks = (*WebhooksService)(&c.common)
+	c.Auth = (*AuthService)(&c.common)
+	c.Scheduler = (*SchedulerService)(&c.common)
+	c.Notetakers = (*NotetakersService)(&c.common)
+
+	return c, nil
+}
+
+func (c *Client) NewRequest(ctx context.Context, method, path string, body any) (*http.Request, error) {
+	u, err := url.Parse(c.BaseURL + path)
+	if err != nil {
+		return nil, err
+	}
+
+	var buf io.Reader
+	if body != nil {
+		b, err := json.Marshal(body)
+		if err != nil {
+			return nil, err
+		}
+		buf = bytes.NewReader(b)
+	}
+
+	req, err := http.NewRequestWithContext(ctx, method, u.String(), buf)
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Set("Authorization", "Bearer "+c.APIKey)
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Accept", "application/json")
+
+	return req, nil
+}
+
+// doWithRetry executes an HTTP request with exponential backoff retry on 5xx and 429 errors.
+func (c *Client) doWithRetry(req *http.Request) (*http.Response, error) {
+	var resp *http.Response
+	var err error
+
+	for attempt := 0; attempt <= c.MaxRetries; attempt++ {
+		resp, err = c.HTTPClient.Do(req)
+		if err != nil {
+			if attempt < c.MaxRetries {
+				time.Sleep(c.RetryWait * time.Duration(1<<attempt))
+				continue
+			}
+			return nil, err
+		}
+
+		// Don't retry on success or client errors (except 429)
+		if resp.StatusCode < 500 && resp.StatusCode != 429 {
+			return resp, nil
+		}
+
+		_ = resp.Body.Close()
+
+		if attempt < c.MaxRetries {
+			wait := c.RetryWait * time.Duration(1<<attempt)
+
+			// Use Retry-After header if present (for 429)
+			if resp.StatusCode == 429 {
+				if retryAfter := resp.Header.Get("Retry-After"); retryAfter != "" {
+					if seconds, parseErr := strconv.Atoi(retryAfter); parseErr == nil {
+						wait = time.Duration(seconds) * time.Second
+					}
+				}
+			}
+
+			time.Sleep(wait)
+		}
+	}
+
+	return resp, nil
+}
+
+func (c *Client) Do(req *http.Request, v any) (*Response[any], error) {
+	resp, err := c.doWithRetry(req)
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	c.updateRateLimits(resp)
+
+	if resp.StatusCode >= 400 {
+		return nil, parseError(resp)
+	}
+
+	if v == nil {
+		return &Response[any]{RequestID: resp.Header.Get("X-Request-Id")}, nil
+	}
+
+	var result struct {
+		Data      json.RawMessage `json:"data"`
+		RequestID string          `json:"request_id"`
+	}
+
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		return nil, err
+	}
+
+	if err := json.Unmarshal(result.Data, v); err != nil {
+		return nil, err
+	}
+
+	return &Response[any]{
+		Data:      v,
+		RequestID: result.RequestID,
+	}, nil
+}
+
+// DoRaw executes a request and decodes the response directly (not wrapped in data/request_id).
+// Use this for endpoints that return arrays or objects directly without the standard wrapper.
+func (c *Client) DoRaw(req *http.Request, v any) error {
+	resp, err := c.doWithRetry(req)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	c.updateRateLimits(resp)
+
+	if resp.StatusCode >= 400 {
+		return parseError(resp)
+	}
+
+	if v == nil {
+		return nil
+	}
+
+	return json.NewDecoder(resp.Body).Decode(v)
+}
+
+// DoList executes a request and decodes a list response with pagination.
+func (c *Client) DoList(req *http.Request, v any) (string, string, error) {
+	resp, err := c.doWithRetry(req)
+	if err != nil {
+		return "", "", err
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	c.updateRateLimits(resp)
+
+	if resp.StatusCode >= 400 {
+		return "", "", parseError(resp)
+	}
+
+	var result struct {
+		Data       json.RawMessage `json:"data"`
+		RequestID  string          `json:"request_id"`
+		NextCursor string          `json:"next_cursor"`
+	}
+
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		return "", "", err
+	}
+
+	if err := json.Unmarshal(result.Data, v); err != nil {
+		return "", "", err
+	}
+
+	return result.NextCursor, result.RequestID, nil
+}
+
+func (c *Client) updateRateLimits(resp *http.Response) {
+	c.rateMu.Lock()
+	defer c.rateMu.Unlock()
+	c.rateLimits = parseRateLimits(resp)
+}
+
+func (c *Client) RateLimits() Rate {
+	c.rateMu.Lock()
+	defer c.rateMu.Unlock()
+	return c.rateLimits
+}
+
+func parseError(resp *http.Response) error {
+	var apiErr APIError
+	if err := json.NewDecoder(resp.Body).Decode(&apiErr); err != nil {
+		return fmt.Errorf("nylas: request failed with status %d", resp.StatusCode)
+	}
+	apiErr.StatusCode = resp.StatusCode
+	apiErr.RequestID = resp.Header.Get("X-Request-Id")
+	return &apiErr
+}
+
+// Service type aliases
+type (
+	MessagesService    service
+	ThreadsService     service
+	DraftsService      service
+	CalendarsService   service
+	EventsService      service
+	ContactsService    service
+	FoldersService     service
+	AttachmentsService service
+	GrantsService      service
+	WebhooksService    service
+	AuthService        service
+	SchedulerService   service
+	NotetakersService  service
+)
