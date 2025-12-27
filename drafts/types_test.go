@@ -49,6 +49,53 @@ func TestListOptions_Values(t *testing.T) {
 			},
 			want: 1,
 		},
+		{
+			name: "with subject",
+			opts: &ListOptions{Subject: ptrString("test subject")},
+			want: 1,
+		},
+		{
+			name: "with to",
+			opts: &ListOptions{To: ptrString("recipient@test.com")},
+			want: 1,
+		},
+		{
+			name: "with cc",
+			opts: &ListOptions{CC: ptrString("cc@test.com")},
+			want: 1,
+		},
+		{
+			name: "with bcc",
+			opts: &ListOptions{BCC: ptrString("bcc@test.com")},
+			want: 1,
+		},
+		{
+			name: "with unread",
+			opts: &ListOptions{Unread: ptrBool(true)},
+			want: 1,
+		},
+		{
+			name: "with has_attachment",
+			opts: &ListOptions{HasAttachment: ptrBool(true)},
+			want: 1,
+		},
+		{
+			name: "with all options",
+			opts: &ListOptions{
+				Limit:         ptr(100),
+				PageToken:     "token123",
+				Subject:       ptrString("Hello"),
+				AnyEmail:      []string{"a@test.com"},
+				To:            ptrString("to@test.com"),
+				CC:            ptrString("cc@test.com"),
+				BCC:           ptrString("bcc@test.com"),
+				Unread:        ptrBool(false),
+				Starred:       ptrBool(true),
+				ThreadID:      ptrString("thread-1"),
+				HasAttachment: ptrBool(true),
+			},
+			want: 11,
+		},
 	}
 
 	for _, tt := range tests {

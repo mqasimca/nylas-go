@@ -30,19 +30,24 @@ type Client struct {
 	MaxRetries int
 	RetryWait  time.Duration
 
-	Messages    *MessagesService
-	Threads     *ThreadsService
-	Drafts      *DraftsService
-	Calendars   *CalendarsService
-	Events      *EventsService
-	Contacts    *ContactsService
-	Folders     *FoldersService
-	Attachments *AttachmentsService
-	Grants      *GrantsService
-	Webhooks    *WebhooksService
-	Auth        *AuthService
-	Scheduler   *SchedulerService
-	Notetakers  *NotetakersService
+	Messages     *MessagesService
+	Threads      *ThreadsService
+	Drafts       *DraftsService
+	Calendars    *CalendarsService
+	Events       *EventsService
+	Contacts     *ContactsService
+	Folders      *FoldersService
+	Attachments  *AttachmentsService
+	Grants       *GrantsService
+	Webhooks     *WebhooksService
+	Auth         *AuthService
+	Scheduler    *SchedulerService
+	Notetakers   *NotetakersService
+	Applications *ApplicationsService
+	RedirectURIs *RedirectURIsService
+	Connectors   *ConnectorsService
+	Credentials  *CredentialsService
+	SmartCompose *SmartComposeService
 
 	rateMu     sync.Mutex
 	rateLimits Rate
@@ -92,6 +97,11 @@ func NewClient(opts ...Option) (*Client, error) {
 	c.Auth = (*AuthService)(&c.common)
 	c.Scheduler = (*SchedulerService)(&c.common)
 	c.Notetakers = (*NotetakersService)(&c.common)
+	c.Applications = (*ApplicationsService)(&c.common)
+	c.RedirectURIs = (*RedirectURIsService)(&c.common)
+	c.Connectors = (*ConnectorsService)(&c.common)
+	c.Credentials = (*CredentialsService)(&c.common)
+	c.SmartCompose = (*SmartComposeService)(&c.common)
 
 	return c, nil
 }
@@ -307,4 +317,14 @@ type (
 	SchedulerService service
 	// NotetakersService handles notetaker operations.
 	NotetakersService service
+	// ApplicationsService handles application configuration operations.
+	ApplicationsService service
+	// RedirectURIsService handles redirect URI operations.
+	RedirectURIsService service
+	// ConnectorsService handles connector operations.
+	ConnectorsService service
+	// CredentialsService handles credential operations.
+	CredentialsService service
+	// SmartComposeService handles AI-powered message composition.
+	SmartComposeService service
 )

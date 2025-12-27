@@ -255,3 +255,159 @@ func TestWebhooksService_RotateSecret(t *testing.T) {
 		t.Errorf("expected new-secret-456, got %s", resp.WebhookSecret)
 	}
 }
+
+func TestWebhooksService_ListAll(t *testing.T) {
+	page := 0
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		page++
+		w.WriteHeader(http.StatusOK)
+		if page == 1 {
+			_, _ = w.Write([]byte(`{
+				"request_id": "req-1",
+				"data": [{"id": "webhook-1"}, {"id": "webhook-2"}],
+				"next_cursor": "page2"
+			}`))
+		} else {
+			_, _ = w.Write([]byte(`{
+				"request_id": "req-2",
+				"data": [{"id": "webhook-3"}],
+				"next_cursor": ""
+			}`))
+		}
+	}))
+	defer srv.Close()
+
+	client, _ := NewClient(WithAPIKey("test-key"), WithBaseURL(srv.URL))
+	iter := client.Webhooks.ListAll(context.Background(), nil)
+	all, err := iter.Collect()
+
+	if err != nil {
+		t.Fatalf("Collect() error = %v", err)
+	}
+	if len(all) != 3 {
+		t.Errorf("Collect() count = %d, want 3", len(all))
+	}
+}
+
+func TestWebhooksService_GetIPAddresses(t *testing.T) {
+	tests := []struct {
+		name       string
+		statusCode int
+		response   string
+		wantErr    bool
+		wantCount  int
+	}{
+		{
+			name:       "success",
+			statusCode: http.StatusOK,
+			response: `{
+				"request_id": "req-123",
+				"data": {
+					"ip_addresses": ["192.168.1.1", "192.168.1.2", "10.0.0.1"],
+					"updated_at": 1700000000
+				}
+			}`,
+			wantErr:   false,
+			wantCount: 3,
+		},
+		{
+			name:       "unauthorized",
+			statusCode: http.StatusUnauthorized,
+			response:   `{"error": "unauthorized"}`,
+			wantErr:    true,
+		},
+		{
+			name:       "forbidden - not paid customer",
+			statusCode: http.StatusForbidden,
+			response:   `{"error": "This endpoint is available for paid customers only"}`,
+			wantErr:    true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				if r.Method != http.MethodGet {
+					t.Errorf("expected GET, got %s", r.Method)
+				}
+				if r.URL.Path != "/v3/webhooks/ip-addresses" {
+					t.Errorf("unexpected path: %s", r.URL.Path)
+				}
+				w.WriteHeader(tt.statusCode)
+				_, _ = w.Write([]byte(tt.response))
+			}))
+			defer srv.Close()
+
+			client, _ := NewClient(WithAPIKey("test-key"), WithBaseURL(srv.URL))
+			resp, err := client.Webhooks.GetIPAddresses(context.Background())
+
+			if (err != nil) != tt.wantErr {
+				t.Errorf("error = %v, wantErr %v", err, tt.wantErr)
+			}
+			if !tt.wantErr && len(resp.IPAddresses) != tt.wantCount {
+				t.Errorf("got %d IP addresses, want %d", len(resp.IPAddresses), tt.wantCount)
+			}
+		})
+	}
+}
+
+func TestExtractChallengeParameter(t *testing.T) {
+	tests := []struct {
+		name          string
+		webhookURL    string
+		wantChallenge string
+		wantErr       bool
+	}{
+		{
+			name:          "valid URL with challenge",
+			webhookURL:    "https://example.com/webhook?challenge=abc123",
+			wantChallenge: "abc123",
+			wantErr:       false,
+		},
+		{
+			name:          "URL with multiple params",
+			webhookURL:    "https://example.com/webhook?foo=bar&challenge=xyz789&baz=qux",
+			wantChallenge: "xyz789",
+			wantErr:       false,
+		},
+		{
+			name:          "URL with encoded challenge",
+			webhookURL:    "https://example.com/webhook?challenge=test%20value",
+			wantChallenge: "test value",
+			wantErr:       false,
+		},
+		{
+			name:       "URL without challenge",
+			webhookURL: "https://example.com/webhook?other=param",
+			wantErr:    true,
+		},
+		{
+			name:       "URL with empty challenge",
+			webhookURL: "https://example.com/webhook?challenge=",
+			wantErr:    true,
+		},
+		{
+			name:       "invalid URL",
+			webhookURL: "://invalid",
+			wantErr:    true,
+		},
+		{
+			name:       "empty URL",
+			webhookURL: "",
+			wantErr:    true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			challenge, err := ExtractChallengeParameter(tt.webhookURL)
+
+			if (err != nil) != tt.wantErr {
+				t.Errorf("error = %v, wantErr %v", err, tt.wantErr)
+			}
+			if !tt.wantErr && challenge != tt.wantChallenge {
+				t.Errorf("challenge = %q, want %q", challenge, tt.wantChallenge)
+			}
+		})
+	}
+}

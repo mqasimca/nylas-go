@@ -17,11 +17,15 @@ func (s *CalendarsService) List(ctx context.Context, grantID string, opts *calen
 		return nil, fmt.Errorf("calendars.List: %w", err)
 	}
 
+	q := req.URL.Query()
 	if opts != nil {
-		q := req.URL.Query()
 		setQueryParams(q, opts.Values())
-		req.URL.RawQuery = q.Encode()
 	}
+	// Set default limit if not provided (matches API default of 50)
+	if q.Get("limit") == "" {
+		q.Set("limit", "50")
+	}
+	req.URL.RawQuery = q.Encode()
 
 	var data []calendars.Calendar
 	nextCursor, requestID, err := s.client.DoList(req, &data)

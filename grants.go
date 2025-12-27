@@ -88,3 +88,35 @@ func (s *GrantsService) Delete(ctx context.Context, grantID string) error {
 
 	return nil
 }
+
+// ListAll returns an iterator for all grants using offset-based pagination.
+func (s *GrantsService) ListAll(ctx context.Context, opts *grants.ListOptions) *Iterator[grants.Grant] {
+	offset := 0
+	limit := 50
+	if opts != nil && opts.Limit != nil {
+		limit = *opts.Limit
+	}
+
+	return NewIterator(ctx, func(ctx context.Context, pageToken string) ([]grants.Grant, string, error) {
+		o := &grants.ListOptions{}
+		if opts != nil {
+			*o = *opts
+		}
+		o.Offset = &offset
+		o.Limit = &limit
+
+		resp, err := s.List(ctx, o)
+		if err != nil {
+			return nil, "", err
+		}
+
+		// If we got fewer results than the limit, there are no more pages
+		if len(resp.Data) < limit {
+			return resp.Data, "", nil
+		}
+
+		// Prepare for next page
+		offset += len(resp.Data)
+		return resp.Data, "next", nil
+	})
+}

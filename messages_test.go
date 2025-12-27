@@ -356,3 +356,60 @@ func TestMessagesService_StopScheduled(t *testing.T) {
 		t.Errorf("StopScheduled() error = %v", err)
 	}
 }
+
+func TestMessagesService_Clean(t *testing.T) {
+	tests := []struct {
+		name       string
+		response   string
+		statusCode int
+		wantCount  int
+		wantErr    bool
+	}{
+		{
+			name: "success",
+			response: `{
+				"data": [
+					{"id": "msg-1", "grant_id": "grant-123", "conversation": "Clean text"},
+					{"id": "msg-2", "grant_id": "grant-123", "conversation": "More clean text"}
+				],
+				"request_id": "req-1"
+			}`,
+			statusCode: 200,
+			wantCount:  2,
+		},
+		{
+			name:       "unauthorized",
+			response:   `{"message": "unauthorized", "type": "error"}`,
+			statusCode: 401,
+			wantErr:    true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			client := newTestClient(t, func(w http.ResponseWriter, r *http.Request) {
+				if r.Method != http.MethodPut {
+					t.Errorf("Method = %s, want PUT", r.Method)
+				}
+				if r.URL.Path != "/v3/grants/grant-123/messages/clean" {
+					t.Errorf("Path = %s, want /v3/grants/grant-123/messages/clean", r.URL.Path)
+				}
+				w.WriteHeader(tt.statusCode)
+				_, _ = w.Write([]byte(tt.response))
+			})
+
+			result, err := client.Messages.Clean(context.Background(), "grant-123", &messages.CleanRequest{
+				MessageID:   []string{"msg-1", "msg-2"},
+				IgnoreLinks: Ptr(true),
+			})
+
+			if (err != nil) != tt.wantErr {
+				t.Errorf("Clean() error = %v, wantErr %v", err, tt.wantErr)
+				return
+			}
+			if !tt.wantErr && len(result) != tt.wantCount {
+				t.Errorf("Clean() count = %d, want %d", len(result), tt.wantCount)
+			}
+		})
+	}
+}

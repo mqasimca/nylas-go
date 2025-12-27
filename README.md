@@ -52,16 +52,16 @@ func main() {
 | `Messages` | Email messages (list, get, send, update, delete, scheduled messages) |
 | `Threads` | Email threads/conversations |
 | `Drafts` | Email drafts (create, update, send, delete) |
-| `Calendars` | Calendar management |
-| `Events` | Calendar events (CRUD, recurring events) |
-| `Contacts` | Contact management |
+| `Calendars` | Calendar management (CRUD, availability, free/busy) |
+| `Events` | Calendar events (CRUD, recurring events, RSVP) |
+| `Contacts` | Contact management (CRUD, contact groups) |
 | `Folders` | Email folders/labels |
-| `Attachments` | File attachments |
+| `Attachments` | File attachments (get, download) |
 | `Grants` | OAuth grants management |
-| `Webhooks` | Webhook subscriptions |
-| `Auth` | Authentication utilities |
-| `Scheduler` | Scheduling pages |
-| `Notetakers` | AI notetaker for meetings |
+| `Webhooks` | Webhook subscriptions (CRUD, rotate secret) |
+| `Auth` | OAuth2 authentication (URL generation, token exchange, refresh, revoke) |
+| `Scheduler` | Scheduling configurations and bookings |
+| `Notetakers` | AI meeting bot (record, transcribe, summarize) |
 
 ## Configuration
 

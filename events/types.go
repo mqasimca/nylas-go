@@ -405,3 +405,43 @@ func (e *Event) IsAllDay() bool {
 func (e *Event) IsRecurring() bool {
 	return e.Recurrence != nil && e.Recurrence.RRule != ""
 }
+
+// ImportOptions specifies options for importing events.
+// This endpoint returns all events from a calendar, including recurring event
+// instances with their parent events and any overrides.
+type ImportOptions struct {
+	// CalendarID is the calendar to import events from (required).
+	CalendarID string `json:"calendar_id"`
+	// Start filters events starting on or after this Unix timestamp.
+	Start *int64 `json:"start,omitempty"`
+	// End filters events starting before this Unix timestamp.
+	End *int64 `json:"end,omitempty"`
+	// Limit is the maximum number of events to return (default 50, max 200).
+	Limit *int `json:"limit,omitempty"`
+	// PageToken is the cursor for pagination.
+	PageToken string `json:"page_token,omitempty"`
+}
+
+// Values converts ImportOptions to URL query parameters.
+func (o *ImportOptions) Values() map[string]any {
+	if o == nil {
+		return nil
+	}
+	v := make(map[string]any)
+	if o.CalendarID != "" {
+		v["calendar_id"] = o.CalendarID
+	}
+	if o.Start != nil {
+		v["start"] = *o.Start
+	}
+	if o.End != nil {
+		v["end"] = *o.End
+	}
+	if o.Limit != nil {
+		v["limit"] = *o.Limit
+	}
+	if o.PageToken != "" {
+		v["page_token"] = o.PageToken
+	}
+	return v
+}

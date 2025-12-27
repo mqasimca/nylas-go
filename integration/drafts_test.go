@@ -2,7 +2,7 @@
 
 // Drafts Integration Tests Coverage:
 //   - List, Get, Create, Update, Delete, ListAll, CreateWithAttachmentMetadata ✓
-//   - Send ✓ (requires NYLAS_TEST_EMAIL env var)
+//   - Send ✓ (requires NYLAS_TEST_EMAIL env var, cleans up sent messages)
 //
 // All DraftsService methods are fully tested.
 
@@ -328,6 +328,7 @@ func TestDrafts_Send(t *testing.T) {
 
 	RunForEachProvider(t, cfg, func(t *testing.T, grantID string) {
 		ctx := NewTestContext(t)
+		cleanup := NewCleanup(t)
 
 		// Create a draft first
 		createReq := &drafts.CreateRequest{
@@ -352,6 +353,15 @@ func TestDrafts_Send(t *testing.T) {
 			_ = client.Drafts.Delete(ctx, grantID, created.ID)
 			t.Fatalf("Drafts.Send failed: %v", err)
 		}
+
+		// Clean up: delete the sent message after test
+		cleanup.Add(func() {
+			if err := client.Messages.Delete(ctx, grantID, sent.ID); err != nil {
+				t.Logf("Warning: failed to delete sent message %s: %v", sent.ID, err)
+			} else {
+				t.Logf("Cleaned up sent message: %s", sent.ID)
+			}
+		})
 
 		if sent.ID == "" {
 			t.Error("Sent draft ID should not be empty")

@@ -127,7 +127,7 @@ func TestAttachments_Download(t *testing.T) {
 		if err != nil {
 			t.Fatalf("Download(%s) error = %v", attachmentID, err)
 		}
-		defer download.Content.Close()
+		defer func() { _ = download.Content.Close() }()
 
 		// Read content to verify download works
 		data, err := io.ReadAll(download.Content)

@@ -4,11 +4,9 @@
 //
 // Messages Integration Tests Coverage:
 //   - List, Get, ListAll, Update, ListScheduled, GetScheduled, Clean, ListWithFilters ✓
-//   - Send ✓ (requires NYLAS_TEST_EMAIL env var)
+//   - Send ✓ (requires NYLAS_TEST_EMAIL env var, cleans up sent messages)
 //
-// Intentionally NOT tested (safety reasons):
-//   - Delete: Permanently deletes messages from user's mailbox
-//   - StopScheduled: Requires active scheduled messages; tested indirectly via unit tests
+// Note: StopScheduled requires active scheduled messages; tested indirectly via unit tests
 
 package integration
 
@@ -318,6 +316,7 @@ func TestMessages_Send(t *testing.T) {
 
 	RunForEachProvider(t, cfg, func(t *testing.T, grantID string) {
 		ctx := NewTestContext(t)
+		cleanup := NewCleanup(t)
 
 		// Send a test email
 		sendReq := &messages.SendRequest{
@@ -332,6 +331,15 @@ func TestMessages_Send(t *testing.T) {
 		if err != nil {
 			t.Fatalf("Messages.Send failed: %v", err)
 		}
+
+		// Clean up: delete the sent message after test
+		cleanup.Add(func() {
+			if err := client.Messages.Delete(ctx, grantID, sent.ID); err != nil {
+				t.Logf("Warning: failed to delete sent message %s: %v", sent.ID, err)
+			} else {
+				t.Logf("Cleaned up sent message: %s", sent.ID)
+			}
+		})
 
 		if sent.ID == "" {
 			t.Error("Sent message ID should not be empty")

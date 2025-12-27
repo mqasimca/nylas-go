@@ -78,3 +78,11 @@ type RotateSecretResponse struct {
 	// WebhookSecret is the newly generated secret for signature verification.
 	WebhookSecret string `json:"webhook_secret"`
 }
+
+// IPAddressesResponse contains the list of Nylas IP addresses for webhook whitelisting.
+type IPAddressesResponse struct {
+	// IPAddresses is the list of IP addresses that Nylas uses to send webhooks.
+	IPAddresses []string `json:"ip_addresses"`
+	// UpdatedAt is the Unix timestamp when the IP list was last updated.
+	UpdatedAt int64 `json:"updated_at,omitempty"`
+}

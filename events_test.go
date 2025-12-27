@@ -448,3 +448,164 @@ func TestEventsService_SendRSVPErrors(t *testing.T) {
 		})
 	}
 }
+
+func TestEventsService_Import(t *testing.T) {
+	tests := []struct {
+		name       string
+		grantID    string
+		opts       *events.ImportOptions
+		response   string
+		statusCode int
+		wantCount  int
+		wantErr    bool
+	}{
+		{
+			name:       "success",
+			grantID:    "grant-123",
+			opts:       &events.ImportOptions{CalendarID: "cal-123"},
+			response:   `{"data": [{"id": "event-1", "title": "Meeting"}, {"id": "event-2", "title": "Lunch"}], "request_id": "req-1"}`,
+			statusCode: 200,
+			wantCount:  2,
+		},
+		{
+			name:       "empty list",
+			grantID:    "grant-123",
+			opts:       &events.ImportOptions{CalendarID: "cal-123"},
+			response:   `{"data": [], "request_id": "req-1"}`,
+			statusCode: 200,
+			wantCount:  0,
+		},
+		{
+			name:    "with time range",
+			grantID: "grant-123",
+			opts: &events.ImportOptions{
+				CalendarID: "cal-123",
+				Start:      Ptr(int64(1700000000)),
+				End:        Ptr(int64(1700100000)),
+			},
+			response:   `{"data": [{"id": "event-1"}], "request_id": "req-1"}`,
+			statusCode: 200,
+			wantCount:  1,
+		},
+		{
+			name:       "unauthorized",
+			grantID:    "grant-123",
+			opts:       &events.ImportOptions{CalendarID: "cal-123"},
+			response:   `{"message": "unauthorized", "type": "error"}`,
+			statusCode: 401,
+			wantErr:    true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			client := newTestClient(t, func(w http.ResponseWriter, r *http.Request) {
+				if r.Method != http.MethodGet {
+					t.Errorf("Method = %s, want GET", r.Method)
+				}
+				if r.URL.Path != "/v3/grants/grant-123/events/import" {
+					t.Errorf("Path = %s, want /v3/grants/grant-123/events/import", r.URL.Path)
+				}
+				w.WriteHeader(tt.statusCode)
+				_, _ = w.Write([]byte(tt.response))
+			})
+
+			resp, err := client.Events.Import(context.Background(), tt.grantID, tt.opts)
+
+			if (err != nil) != tt.wantErr {
+				t.Errorf("Import() error = %v, wantErr %v", err, tt.wantErr)
+				return
+			}
+			if !tt.wantErr && len(resp.Data) != tt.wantCount {
+				t.Errorf("Import() count = %d, want %d", len(resp.Data), tt.wantCount)
+			}
+		})
+	}
+}
+
+func TestEventsService_ImportAll(t *testing.T) {
+	page := 0
+	client := newTestClient(t, func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/v3/grants/grant-123/events/import" {
+			t.Errorf("Path = %s, want /v3/grants/grant-123/events/import", r.URL.Path)
+		}
+		page++
+		var resp map[string]any
+		if page == 1 {
+			resp = map[string]any{
+				"data":        []map[string]string{{"id": "event-1"}, {"id": "event-2"}},
+				"next_cursor": "page2",
+				"request_id":  "req-1",
+			}
+		} else {
+			resp = map[string]any{
+				"data":       []map[string]string{{"id": "event-3"}},
+				"request_id": "req-2",
+			}
+		}
+		_ = json.NewEncoder(w).Encode(resp)
+	})
+
+	iter := client.Events.ImportAll(context.Background(), "grant-123", &events.ImportOptions{CalendarID: "cal-123"})
+	all, err := iter.Collect()
+
+	if err != nil {
+		t.Fatalf("Collect() error = %v", err)
+	}
+	if len(all) != 3 {
+		t.Errorf("Collect() count = %d, want 3", len(all))
+	}
+}
+
+func TestImportOptions_Values(t *testing.T) {
+	tests := []struct {
+		name string
+		opts *events.ImportOptions
+		want map[string]any
+	}{
+		{
+			name: "nil options",
+			opts: nil,
+			want: nil,
+		},
+		{
+			name: "calendar_id only",
+			opts: &events.ImportOptions{CalendarID: "cal-123"},
+			want: map[string]any{"calendar_id": "cal-123"},
+		},
+		{
+			name: "all fields",
+			opts: &events.ImportOptions{
+				CalendarID: "cal-123",
+				Start:      Ptr(int64(1700000000)),
+				End:        Ptr(int64(1700100000)),
+				Limit:      Ptr(50),
+				PageToken:  "token123",
+			},
+			want: map[string]any{
+				"calendar_id": "cal-123",
+				"start":       int64(1700000000),
+				"end":         int64(1700100000),
+				"limit":       50,
+				"page_token":  "token123",
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := tt.opts.Values()
+			if tt.want == nil && got != nil {
+				t.Errorf("Values() = %v, want nil", got)
+				return
+			}
+			if tt.want != nil {
+				for k, v := range tt.want {
+					if got[k] != v {
+						t.Errorf("Values()[%s] = %v, want %v", k, got[k], v)
+					}
+				}
+			}
+		})
+	}
+}

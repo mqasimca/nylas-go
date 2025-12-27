@@ -217,3 +217,39 @@ func TestGrantsService_ListWithOptions(t *testing.T) {
 		t.Errorf("expected 1 grant, got %d", len(resp.Data))
 	}
 }
+
+func TestGrantsService_ListAll(t *testing.T) {
+	// Grants uses offset-based pagination, not cursor-based
+	page := 0
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		page++
+		offset := r.URL.Query().Get("offset")
+		w.WriteHeader(http.StatusOK)
+		if offset == "" || offset == "0" {
+			// First page: return 2 grants (matching limit of 2)
+			_, _ = w.Write([]byte(`{
+				"request_id": "req-1",
+				"data": [{"id": "grant-1"}, {"id": "grant-2"}]
+			}`))
+		} else {
+			// Second page: return 1 grant (less than limit means last page)
+			_, _ = w.Write([]byte(`{
+				"request_id": "req-2",
+				"data": [{"id": "grant-3"}]
+			}`))
+		}
+	}))
+	defer srv.Close()
+
+	client, _ := NewClient(WithAPIKey("test-key"), WithBaseURL(srv.URL))
+	limit := 2
+	iter := client.Grants.ListAll(context.Background(), &grants.ListOptions{Limit: &limit})
+	all, err := iter.Collect()
+
+	if err != nil {
+		t.Fatalf("Collect() error = %v", err)
+	}
+	if len(all) != 3 {
+		t.Errorf("Collect() count = %d, want 3", len(all))
+	}
+}

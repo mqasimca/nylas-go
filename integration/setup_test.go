@@ -19,9 +19,10 @@ type Provider struct {
 
 // TestConfig holds integration test configuration.
 type TestConfig struct {
-	APIKey    string
-	ClientID  string
-	Providers []Provider
+	APIKey          string
+	ClientID        string
+	Providers       []Provider
+	TestMeetingLink string // Optional meeting link for notetaker tests
 }
 
 // providerEnvVars maps provider names to their environment variable names.
@@ -56,9 +57,10 @@ func LoadConfig(t *testing.T) *TestConfig {
 	}
 
 	return &TestConfig{
-		APIKey:    apiKey,
-		ClientID:  os.Getenv("NYLAS_CLIENT_ID"),
-		Providers: providers,
+		APIKey:          apiKey,
+		ClientID:        os.Getenv("NYLAS_CLIENT_ID"),
+		Providers:       providers,
+		TestMeetingLink: os.Getenv("NYLAS_TEST_MEETING_LINK"),
 	}
 }
 
